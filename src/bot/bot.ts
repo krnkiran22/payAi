@@ -43,9 +43,11 @@ function setupBot(bot: Telegraf<MyContext>) {
 
     // Auth Middleware
     bot.use(async (ctx, next) => {
-        const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
-        if (!config.APPROVED_USERS.includes(username)) {
-            return ctx.reply(`Sorry @${username}, you are not authorized to use this bot.`);
+        const username = (ctx.from?.username || ctx.from?.first_name || 'unknown').toLowerCase();
+        const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username);
+
+        if (!isApproved) {
+            return ctx.reply(`Sorry @${ctx.from?.username || ctx.from?.first_name}, you are not authorized to use this bot.`);
         }
         return next();
     });
