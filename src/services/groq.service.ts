@@ -39,9 +39,8 @@ export class GroqService {
             }
 
             const imageBase64 = fs.readFileSync(imagePath, { encoding: 'base64' });
-            // Detect mime type from extension
             const ext = imagePath.split('.').pop()?.toLowerCase();
-            const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+            const mimeType = (ext === 'png') ? 'image/png' : 'image/jpeg';
 
             const systemPrompt = "You are an expert Indian bill and payment screenshot parsing engine. You can see images and extract precise data.";
             const userPrompt = `Analyze this image (could be a GPay/UPI screenshot or a bill/invoice). 
@@ -50,11 +49,11 @@ Extract the Transaction Amount, Vendor/Merchant Name, Date, and Payment Method.
 GUIDELINES:
 1. THE AMOUNT: 
    - Look for the primary amount being paid (usually the largest text on GPay).
-   - IGNORE balance amounts (e.g., "Balance: 500").
+   - IGNORE balance amounts (e.g., "Balance: 500" or "UPI Lite Balance").
    - Extract only the numeric value.
 2. THE VENDOR: The person or entity being paid (e.g., "Rohit Kapoor", "redBus").
 3. THE DATE: Usually in DD/MM/YYYY or similar format. If not found, use today's date.
-4. CATEGORY: cab/food/shopping/travel/utilities/other.
+4. CATEGORY: travel/food/shopping/utilities/other.
 
 Return ONLY a valid JSON object:
 {
@@ -70,6 +69,7 @@ Return ONLY a valid JSON object:
 Ensure the output is ONLY JSON.`;
 
             console.error('--- DEBUG: CALLING GROQ VISION ---');
+
             const completion = await this.groq.chat.completions.create({
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -116,28 +116,25 @@ Ensure the output is ONLY JSON.`;
         }
     }
 
-    // Keep the old parseBill as a text-only fallback
+    /**
+     * Text-only fallback (keeps OCR compatibility if needed)
+     */
     static async parseBill(ocrText: string): Promise<{ data: ExtractedData; raw: string }> {
-        // ... (existing code)
         try {
             if (!this.groq) {
-                throw new Error('Groq API Key is not configured.');
+                throw new Error('Groq API Key (GROQ_API_KEY) is not set.');
             }
 
-            const systemPrompt = "You are an expert Indian bill and UPI payment parsing engine. Extract structured data from OCR text of bills, receipts, or GPay/UPI screenshots.";
-            const userPrompt = `Analyze this OCR text.
-GOAL: Extract Amount, Vendor, Date.
-IGNORE "Balance" labels.
-
-Return JSON:
+            const systemPrompt = "Extract bill data from OCR text.";
+            const userPrompt = `Extract as JSON:
 {
   "amount": 0,
   "currency": "INR",
-  "vendor": "name",
+  "vendor": "string",
   "expense_date": "YYYY-MM-DD",
-  "payment_method": "UPI/Card/Cash",
+  "payment_method": "UPI",
   "category_hint": "other",
-  "notes": "summary"
+  "notes": "string"
 }
 
 OCR TEXT:
@@ -154,11 +151,10 @@ OCR TEXT:
 
             const responseContent = completion.choices[0]?.message?.content || '{}';
             const parsed = JSON.parse(responseContent);
-            let amount = parseFloat(parsed.amount) || 0;
 
             return {
                 data: {
-                    amount,
+                    amount: parseFloat(parsed.amount) || 0,
                     currency: parsed.currency || 'INR',
                     vendor: parsed.vendor || 'Unknown',
                     expense_date: parsed.expense_date || new Date().toISOString().split('T')[0],
@@ -169,7 +165,7 @@ OCR TEXT:
                 raw: responseContent,
             };
         } catch (error: any) {
-            throw new Error(`Failed to parse bill data: ${error?.message}`);
+            throw new Error(`Text parsing failed: ${error?.message}`);
         }
     }
 }
