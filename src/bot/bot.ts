@@ -82,19 +82,16 @@ function setupBot(bot: Telegraf<MyContext>) {
             writer.on('error', (err) => reject(err));
         });
 
-        await ctx.reply('🤖 Analyzing bill with AI Vision...');
+        await ctx.reply('🔍 Processing bill with OCR...');
 
         try {
-            // New Vision-based parsing (uses the actual pixels)
-            const { data, raw } = await GroqService.analyzeImage(localPath);
-
-            // Background OCR (for text storage in DB)
-            let ocrText = 'Vision used - no OCR run';
-            try {
-                ocrText = await OcrService.performOcr(localPath);
-            } catch (ocrErr) {
-                console.warn('OCR storage failed, but Vision worked.', ocrErr);
+            const ocrText = await OcrService.performOcr(localPath);
+            if (!ocrText) {
+                return ctx.reply('⚠️ Could not extract text from document. Please try a clearer photo.');
             }
+
+            await ctx.reply('🤖 Analyzing data with AI (GPT-OSS-20B)...');
+            const { data, raw } = await GroqService.parseBill(ocrText);
 
             ctx.session.pendingExpense = {
                 ocrText,
@@ -106,7 +103,7 @@ function setupBot(bot: Telegraf<MyContext>) {
             };
 
             const summary = `
-📊 *Bill Extracted (Vision):*
+📊 *Bill Extracted:*
 🏢 Vendor: ${data.vendor}
 💰 Amount: ${data.currency} ${data.amount}
 📅 Date: ${data.expense_date}

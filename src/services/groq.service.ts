@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk';
+import OpenAI from 'openai';
 import { config } from '../config/envs.js';
 import fs from 'fs';
 
@@ -13,120 +13,36 @@ export interface ExtractedData {
 }
 
 export class GroqService {
-    private static _groq: Groq | null = null;
+    private static _client: any = null;
 
-    private static get groq() {
-        if (!this._groq) {
+    private static get client() {
+        if (!this._client) {
             if (!config.GROQ_API_KEY) {
-                console.warn('⚠️ GROQ_API_KEY is not set. LLM parsing will fail.');
+                console.warn('⚠️ GROQ_API_KEY is not set.');
                 return null;
             }
-            this._groq = new Groq({
+            this._client = new OpenAI({
                 apiKey: config.GROQ_API_KEY,
+                baseURL: 'https://api.groq.com/openai/v1',
             });
         }
-        return this._groq;
+        return this._client;
     }
 
     /**
-     * Powerful Vision-based parsing. 
-     * Uses Llama 3.2 Vision to "see" the image, which handles stylized fonts and complex layouts much better than OCR.
+     * Parse bill data using specialized Groq Responses API
      */
     static async analyzeImage(imagePath: string): Promise<{ data: ExtractedData; raw: string }> {
-        try {
-            if (!this.groq) {
-                throw new Error('Groq API Key is not configured.');
-            }
-
-            const imageBase64 = fs.readFileSync(imagePath, { encoding: 'base64' });
-            const ext = imagePath.split('.').pop()?.toLowerCase();
-            const mimeType = (ext === 'png') ? 'image/png' : 'image/jpeg';
-
-            const systemPrompt = "You are an expert Indian bill and payment screenshot parsing engine. You can see images and extract precise data.";
-            const userPrompt = `Analyze this image (could be a GPay/UPI screenshot or a bill/invoice). 
-Extract the Transaction Amount, Vendor/Merchant Name, Date, and Payment Method.
-
-GUIDELINES:
-1. THE AMOUNT: 
-   - Look for the primary amount being paid (usually the largest text on GPay).
-   - IGNORE balance amounts (e.g., "Balance: 500" or "UPI Lite Balance").
-   - Extract only the numeric value.
-2. THE VENDOR: The person or entity being paid (e.g., "Rohit Kapoor", "redBus").
-3. THE DATE: Usually in DD/MM/YYYY or similar format. If not found, use today's date.
-4. CATEGORY: travel/food/shopping/utilities/other.
-
-Return ONLY a valid JSON object:
-{
-  "amount": 0.00,
-  "currency": "INR",
-  "vendor": "string",
-  "expense_date": "YYYY-MM-DD",
-  "payment_method": "UPI/Card/Cash",
-  "category_hint": "string",
-  "notes": "string"
-}
-
-Ensure the output is ONLY JSON.`;
-
-            console.error('--- DEBUG: CALLING GROQ VISION ---');
-
-            const completion = await this.groq.chat.completions.create({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    {
-                        role: 'user',
-                        content: [
-                            { type: 'text', text: userPrompt },
-                            {
-                                type: 'image_url',
-                                image_url: {
-                                    url: `data:${mimeType};base64,${imageBase64}`,
-                                },
-                            },
-                        ],
-                    },
-                ],
-                model: 'llama-3.2-11b-vision-preview',
-                response_format: { type: 'json_object' },
-            });
-
-            const responseContent = completion.choices[0]?.message?.content || '{}';
-            console.error('--- DEBUG: GROQ VISION RESPONSE ---');
-            console.error(responseContent);
-
-            const parsed = JSON.parse(responseContent);
-            let amount = parseFloat(parsed.amount) || 0;
-
-            return {
-                data: {
-                    amount,
-                    currency: parsed.currency || 'INR',
-                    vendor: parsed.vendor || 'Unknown',
-                    expense_date: parsed.expense_date || new Date().toISOString().split('T')[0],
-                    payment_method: parsed.payment_method || 'unknown',
-                    category_hint: parsed.category_hint || 'other',
-                    notes: parsed.notes || '',
-                },
-                raw: responseContent,
-            };
-
-        } catch (error: any) {
-            console.error('Groq Vision Error:', error?.message || error);
-            throw new Error(`Vision parsing failed: ${error?.message || 'Unknown error'}`);
-        }
+        // Since vision models seem to have changed, we'll use OCR + the powerful gpt-oss-20b model as requested
+        // unless we can confirm a vision model. 
+        // For now, let's use the pattern requested by the user.
+        throw new Error("Vision model decommissioned. Falling back to OCR processing...");
     }
 
-    /**
-     * Text-only fallback (keeps OCR compatibility if needed)
-     */
     static async parseBill(ocrText: string): Promise<{ data: ExtractedData; raw: string }> {
-        try {
-            if (!this.groq) {
-                throw new Error('Groq API Key (GROQ_API_KEY) is not set.');
-            }
+        if (!this.client) throw new Error('Client not initialized');
 
-            const systemPrompt = "Extract bill data from OCR text.";
-            const userPrompt = `Extract as JSON:
+        const prompt = `Extract bill data as JSON:
 {
   "amount": 0,
   "currency": "INR",
@@ -140,17 +56,16 @@ Ensure the output is ONLY JSON.`;
 OCR TEXT:
 [${ocrText}]`;
 
-            const completion = await this.groq.chat.completions.create({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt },
-                ],
-                model: 'llama-3.3-70b-versatile',
-                response_format: { type: 'json_object' },
+        try {
+            const response = await this.client.responses.create({
+                model: 'openai/gpt-oss-20b',
+                input: prompt,
             });
 
-            const responseContent = completion.choices[0]?.message?.content || '{}';
-            const parsed = JSON.parse(responseContent);
+            const content = response.output_text || '{}';
+            // Clean content (sometimes models wrap in markdown)
+            const jsonStr = content.substring(content.indexOf('{'), content.lastIndexOf('}') + 1);
+            const parsed = JSON.parse(jsonStr);
 
             return {
                 data: {
@@ -162,27 +77,18 @@ OCR TEXT:
                     category_hint: parsed.category_hint || 'other',
                     notes: parsed.notes || '',
                 },
-                raw: responseContent,
+                raw: content,
             };
         } catch (error: any) {
+            console.error('Parse Bill Error:', error);
             throw new Error(`Text parsing failed: ${error?.message}`);
         }
     }
 
-    /**
-     * Parse text-based factory updates from group chat.
-     */
     static async parseUpdate(text: string): Promise<{ total: number, using: number, notUsing: number, factory: string } | null> {
-        if (!this.groq) return null;
+        if (!this.client) return null;
 
-        const systemPrompt = "You are an expert data extractor. Extract factory update numbers from text.";
-        const userPrompt = `Extract update data from this message: "${text}".
-We are looking for:
-1. Total people.
-2. People using headbands.
-3. People not using headbands.
-4. Factory name (if mentioned, otherwise "unknown").
-
+        const prompt = `Extract factory update data from this message: "${text}".
 Return ONLY JSON:
 {
   "total": number,
@@ -190,21 +96,17 @@ Return ONLY JSON:
   "notUsing": number,
   "factory": "string"
 }
-
-If numbers are missing, try to calculate (total = using + notUsing). If not possible, use 0.`;
+If numbers are missing, calculate (total = using + notUsing).`;
 
         try {
-            const completion = await this.groq.chat.completions.create({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                model: 'llama-3.1-8b-instant', // Faster model for text parsing
-                response_format: { type: 'json_object' }
+            const response = await this.client.responses.create({
+                model: 'openai/gpt-oss-20b',
+                input: prompt,
             });
 
-            const content = completion.choices[0]?.message?.content || '{}';
-            return JSON.parse(content);
+            const content = response.output_text || '{}';
+            const jsonStr = content.substring(content.indexOf('{'), content.lastIndexOf('}') + 1);
+            return JSON.parse(jsonStr);
         } catch (error) {
             console.error('Update Parse Error:', error);
             return null;

@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
-    "build": "tsc",
+    "build": "npm run prisma:generate && tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
@@ -29,6 +29,7 @@
     "luxon": "^3.5.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
+    "openai": "^6.24.0",
     "sharp": "^0.33.5",
     "telegraf": "^4.16.3",
     "tesseract.js": "^6.0.0"
