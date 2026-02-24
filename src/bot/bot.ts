@@ -186,8 +186,14 @@ Does this look correct?
 
     // --- Group Update Logic ---
     bot.on(message('text'), async (ctx, next) => {
-        // Only process if it's in the designated factory group
         const chatId = ctx.chat.id.toString();
+        const chatType = ctx.chat.type;
+
+        if (chatType === 'group' || chatType === 'supergroup') {
+            console.log(`💬 Message in group "${ctx.chat.title}" (ID: ${chatId}) from @${ctx.from?.username}`);
+        }
+
+        // Only process if it's in the designated factory group
         if (chatId !== config.FACTORY_GROUP_ID) return next();
 
         const text = ctx.message.text;
