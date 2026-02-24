@@ -1,22 +1,7 @@
 import Groq from 'groq-sdk';
 import { config } from '../config/envs.js';
-
-export interface ExtractedData {
-    amount: number;
-    currency: string;
-    vendor: string;
-    expense_date: string;
-    payment_method: string;
-    category_hint: string;
-    notes: string;
-}
-
 export class GroqService {
-    private static groq = new Groq({
-        apiKey: config.GROQ_API_KEY,
-    });
-
-    static async parseBill(ocrText: string): Promise<{ data: ExtractedData; raw: string }> {
+    static async parseBill(ocrText) {
         try {
             const systemPrompt = "You are a bill parsing engine. Extract structured data from OCR text of Indian bills and receipts.";
             const userPrompt = `Extract the following fields from this bill text and return ONLY a valid JSON object with no explanation:
@@ -33,7 +18,6 @@ export class GroqService {
 If a field cannot be found, use empty values (0 for amount, empty string for others).
 Bill text:
 [${ocrText}]`;
-
             const completion = await this.groq.chat.completions.create({
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -42,10 +26,8 @@ Bill text:
                 model: 'llama-3-70b-8192',
                 response_format: { type: 'json_object' },
             });
-
             const responseContent = completion.choices[0]?.message?.content || '{}';
             const parsed = JSON.parse(responseContent);
-
             return {
                 data: {
                     amount: parseFloat(parsed.amount) || 0,
@@ -58,9 +40,13 @@ Bill text:
                 },
                 raw: responseContent,
             };
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Groq Parsing Error:', error);
             throw new Error('Failed to parse bill data');
         }
     }
 }
+GroqService.groq = new Groq({
+    apiKey: config.GROQ_API_KEY,
+});
