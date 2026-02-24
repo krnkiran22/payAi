@@ -85,6 +85,23 @@ OCR TEXT:
         }
     }
 
+    static async chat(message: string): Promise<string> {
+        if (!this.client) return "Bot offline.";
+
+        try {
+            const response = await this.client.responses.create({
+                model: 'openai/gpt-oss-20b',
+                input: `You are PotatoBot, a savage, funny, and edgy Telegram bot. 
+The user said: "${message}". 
+Reply to them in a devastatingly funny and savage way. Keep it short.`,
+            });
+            return response.output_text || "I'm speechless at your stupidity.";
+        } catch (error) {
+            console.error('Chat Error:', error);
+            return "I'm busy. Come back when you have a brain.";
+        }
+    }
+
     static async parseUpdate(text: string): Promise<{ total: number, using: number, notUsing: number, factory: string } | null> {
         if (!this.client) return null;
 

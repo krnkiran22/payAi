@@ -221,6 +221,20 @@ Does this look correct?
                 });
 
                 await ctx.reply(`✅ Update recorded for @${username} (Window: ${nextWindow.toFormat('HH:mm')})\n📊 ${data.using}/${data.total} using headbands.`);
+                return;
+            }
+        }
+
+        // --- Savage Reply/Mention Logic ---
+        const botUsername = ctx.botInfo.username;
+        const isMentioned = text.includes(`@${botUsername}`) || (ctx.message as any).reply_to_message?.from?.id === ctx.botInfo.id;
+
+        if (isMentioned || text.toLowerCase().startsWith('hi ') || text.toLowerCase() === 'hi') {
+            try {
+                const reply = await GroqService.chat(text);
+                await ctx.reply(reply);
+            } catch (err) {
+                await ctx.reply("Busy roasting someone else. Try again later.");
             }
         }
     });
