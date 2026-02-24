@@ -34,8 +34,6 @@ const getBot = () => {
         }
         _bot = new Telegraf<MyContext>(config.TELEGRAM_BOT_TOKEN);
         setupBot(_bot);
-
-        // Initialize Scheduler
         SchedulerService.init(_bot);
     }
     return _bot;
@@ -48,7 +46,9 @@ function setupBot(bot: Telegraf<MyContext>) {
     bot.use(async (ctx, next) => {
         const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
         const text = (ctx.message && 'text' in ctx.message) ? ctx.message.text : 'non-text';
-        console.log(`📩 [${ctx.chat?.type}] From: @${username} | Text: ${text}`);
+        if (ctx.chat?.type !== 'private') {
+            console.log(`📩 [${ctx.chat?.type}] From: @${username} | Text: ${text}`);
+        }
         return next();
     });
 
@@ -64,6 +64,7 @@ function setupBot(bot: Telegraf<MyContext>) {
         ctx.reply('Pong! I am alive and ready to roast.');
     });
 
+    // --- Bill Photo Handler ---
     bot.on(message('photo'), async (ctx) => {
         const username = (ctx.from?.username || ctx.from?.first_name || 'unknown').toLowerCase();
         const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username);
@@ -87,11 +88,9 @@ function setupBot(bot: Telegraf<MyContext>) {
         });
 
         await ctx.reply('🔍 Processing bill with OCR...');
-
         try {
             const ocrText = await OcrService.performOcr(localPath);
             if (!ocrText) return ctx.reply('⚠️ No text found.');
-
             await ctx.reply('🤖 Analyzing data with AI (GPT-OSS-20B)...');
             const { data, raw } = await GroqService.parseBill(ocrText);
 
@@ -99,77 +98,63 @@ function setupBot(bot: Telegraf<MyContext>) {
                 ocrText, groqData: data, groqRaw: raw, localPath, mimeType: 'image/jpeg', username
             };
 
-            const summary = `
-📊 *Bill Extracted:*
-🏢 Vendor: ${data.vendor}
-💰 Amount: ${data.currency} ${data.amount}
-📅 Date: ${data.expense_date}
-
-Does this look correct?`;
-
+            const summary = `📊 *Bill Extracted:*\n🏢 Vendor: ${data.vendor}\n💰 Amount: ${data.currency} ${data.amount}\n📅 Date: ${data.expense_date}\n\nDoes this look correct?`;
             ctx.replyWithMarkdown(summary, Markup.inlineKeyboard([
                 [Markup.button.callback('✅ Confirm', 'confirm')],
                 [Markup.button.callback('❌ Cancel', 'cancel')]
             ]));
-
         } catch (error) {
-            ctx.reply(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            ctx.reply(`❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`);
         }
     });
 
+    // --- Group & Mention Handler ---
     bot.on(message('text'), async (ctx, next) => {
-        const chatId = ctx.chat.id.toString();
-        const chatType = ctx.chat.type;
         const text = ctx.message.text;
         const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
+        const chatId = ctx.chat.id.toString();
 
-        if (chatType === 'group' || chatType === 'supergroup') {
-            console.log(`💬 Group [${ctx.chat.title}] ID: ${chatId}`);
-        }
+        // Detect mentions/replies
+        const isMentioned = text.includes(`@${ctx.botInfo.username}`) ||
+            (ctx.message as any).reply_to_message?.from?.id === ctx.botInfo.id;
 
-        // --- Reply/Mention Logic (Savage Mode) ---
-        const isMentioned = text.includes(`@${ctx.botInfo.username}`) || (ctx.message as any).reply_to_message?.from?.id === ctx.botInfo.id;
         if (isMentioned || text.toLowerCase() === 'hi' || text.toLowerCase().startsWith('hi ')) {
+            console.log(`🤖 Triggering AI Roast for @${username}`);
             try {
                 const reply = await GroqService.chat(text);
                 return await ctx.reply(reply);
             } catch (err) {
-                console.error(err);
+                console.error('Chat Error:', err);
             }
         }
 
-        // Only process updates if it's the right group
-        if (chatId !== config.FACTORY_GROUP_ID) return next();
+        // Factory Updates
+        if (chatId === config.FACTORY_GROUP_ID) {
+            const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username.toLowerCase());
+            if (!isApproved) return next();
 
-        // --- Factory Update Logic (Auth Protected) ---
-        const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username.toLowerCase());
-        if (!isApproved) return;
+            if (text.toLowerCase().includes('update') || /\d+/.test(text)) {
+                const data = await GroqService.parseUpdate(text);
+                if (data && (data.total > 0 || data.using > 0)) {
+                    const now = DateTime.now().setZone('Asia/Kolkata');
+                    let nextWindow = now.set({ second: 0, millisecond: 0 });
+                    const m = now.minute;
+                    if (m <= 0) nextWindow = nextWindow.set({ minute: 0 });
+                    else if (m <= 15) nextWindow = nextWindow.set({ minute: 15 });
+                    else if (m <= 30) nextWindow = nextWindow.set({ minute: 30 });
+                    else if (m <= 45) nextWindow = nextWindow.set({ minute: 45 });
+                    else nextWindow = nextWindow.plus({ hours: 1 }).set({ minute: 0 });
 
-        if (text.toLowerCase().includes('update') || /\d+/.test(text)) {
-            const data = await GroqService.parseUpdate(text);
-            if (data && (data.total > 0 || data.using > 0)) {
-                const now = DateTime.now().setZone('Asia/Kolkata');
-                let minutes = now.minute;
-                let nextWindow = now.set({ second: 0, millisecond: 0 });
-
-                if (minutes <= 0) nextWindow = nextWindow.set({ minute: 0 });
-                else if (minutes <= 15) nextWindow = nextWindow.set({ minute: 15 });
-                else if (minutes <= 30) nextWindow = nextWindow.set({ minute: 30 });
-                else if (minutes <= 45) nextWindow = nextWindow.set({ minute: 45 });
-                else nextWindow = nextWindow.plus({ hours: 1 }).set({ minute: 0 });
-
-                await DbService.createFactoryUpdate({
-                    username,
-                    totalPeople: data.total,
-                    usingHeadband: data.using,
-                    notUsingHeadband: data.notUsing,
-                    factoryName: data.factory,
-                    updateWindow: nextWindow.toJSDate()
-                });
-
-                await ctx.reply(`✅ Update saved for @${username} (${nextWindow.toFormat('HH:mm')})`);
+                    await DbService.createFactoryUpdate({
+                        username, totalPeople: data.total, usingHeadband: data.using,
+                        notUsingHeadband: data.notUsing, factoryName: data.factory,
+                        updateWindow: nextWindow.toJSDate()
+                    });
+                    await ctx.reply(`✅ Update saved for @${username} (${nextWindow.toFormat('HH:mm')})`);
+                }
             }
         }
+        return next();
     });
 
     bot.action('confirm', async (ctx) => {
@@ -179,7 +164,6 @@ Does this look correct?`;
         try {
             const { groqData, localPath, username, mimeType, ocrText, groqRaw } = pending;
             const category = (groqData.category_hint as Category) || Category.other;
-            const counter = await DbService.countUserCategoryExpenses(username, category);
             const fileName = `${DateTime.now().toFormat('yyyyMMddHHmm')}_${username}.jpg`;
             const folderId = await DriveService.setupDirectoryStructure(username, category);
             const driveFile = await DriveService.uploadFile(localPath, fileName, mimeType, folderId);
@@ -196,7 +180,7 @@ Does this look correct?`;
             await ctx.editMessageText(`✅ Bill saved to Drive!`);
             delete ctx.session.pendingExpense;
         } catch (error) {
-            await ctx.editMessageText(`❌ Save failed: ${error instanceof Error ? error.message : 'error'}`);
+            await ctx.editMessageText(`❌ Save failed.`);
         }
     });
 
