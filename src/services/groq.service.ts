@@ -37,7 +37,7 @@ export class GroqService {
         }
     }
 
-    private static async runWithRetry(fn: (client: any) => Promise<any>): Promise<any> {
+    public static async runWithRetry(fn: (client: any) => Promise<any>): Promise<any> {
         let attempts = 0;
         const maxAttempts = this._clients.length > 0 ? this._clients.length : 1;
 
