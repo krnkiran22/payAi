@@ -1,7 +1,14 @@
 import { PrismaClient, Category, Status } from '@prisma/client';
 
 export class DbService {
-    private static prisma = new PrismaClient();
+    private static _prisma: PrismaClient | null = null;
+
+    private static get prisma() {
+        if (!this._prisma) {
+            this._prisma = new PrismaClient();
+        }
+        return this._prisma;
+    }
 
     static async createExpense(data: {
         username: string;

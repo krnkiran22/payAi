@@ -12,12 +12,27 @@ export interface ExtractedData {
 }
 
 export class GroqService {
-    private static groq = new Groq({
-        apiKey: config.GROQ_API_KEY,
-    });
+    private static _groq: Groq | null = null;
+
+    private static get groq() {
+        if (!this._groq) {
+            if (!config.GROQ_API_KEY) {
+                console.warn('⚠️ GROQ_API_KEY is not set. LLM parsing will fail.');
+                return null;
+            }
+            this._groq = new Groq({
+                apiKey: config.GROQ_API_KEY,
+            });
+        }
+        return this._groq;
+    }
 
     static async parseBill(ocrText: string): Promise<{ data: ExtractedData; raw: string }> {
         try {
+            if (!this.groq) {
+                throw new Error('Groq API Key is not configured.');
+            }
+            // ... the rest of the method uses this.groq
             const systemPrompt = "You are a bill parsing engine. Extract structured data from OCR text of Indian bills and receipts.";
             const userPrompt = `Extract the following fields from this bill text and return ONLY a valid JSON object with no explanation:
 {

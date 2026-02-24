@@ -5,7 +5,19 @@ import { config } from '../config/envs.js';
 import { getGoogleAuth } from '../utils/auth.utils.js';
 
 export class DriveService {
-    private static drive = google.drive({ version: 'v3', auth: this.getAuth() });
+    private static _drive: any = null;
+
+    private static get drive() {
+        if (!this._drive) {
+            try {
+                this._drive = google.drive({ version: 'v3', auth: this.getAuth() });
+            } catch (err) {
+                console.error('❌ Failed to initialize Google Drive client:', err);
+                return null;
+            }
+        }
+        return this._drive;
+    }
 
     private static getAuth() {
         const credentials = getGoogleAuth();
