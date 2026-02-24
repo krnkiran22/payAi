@@ -34,26 +34,34 @@ export class GroqService {
             }
 
             const systemPrompt = "You are an expert Indian bill and UPI payment parsing engine. Extract structured data from OCR text of bills, receipts, or GPay/UPI screenshots.";
-            const userPrompt = `Extract the following fields from this OCR text. 
-CRITICAL: For invoices, look for "Total Invoice Value", "Grand Total", or "Net Amount". 
-For GPay/UPI, look for the largest bold number or digits near "₹" or "Paid to".
+            const userPrompt = `You are analyzing OCR text from an Indian payment screenshot (like GPay/PhonePe) or a travel invoice (like redBus).
+GOAL: Extract the Transaction Amount, Vendor Name, Date, and Payment Method.
 
-🚫 IMPORTANT: Ignore any amounts labeled as "Balance", "Remaining Balance", "UPI Lite Balance", or "Available Credit". ONLY extract the actual amount being paid or transferred.
+GUIDELINES:
+1. THE AMOUNT: 
+   - On GPay: It's the largest number (e.g., 150, 500, 1200). 
+   - IGNORE numbers near keywords like "Balance", "Remaining", "Limit", or "UPI Lite".
+   - If you see digits with spaces (e.g., "1 5 0"), combine them.
+2. THE VENDOR: Look after "Paid to", "To:", or the merchant name at the top.
+3. THE DATE: Usually at the top or bottom in DD/MM/YYYY or MMM DD format.
 
-Return ONLY a valid JSON object:
+Return ONLY a JSON object:
 {
-  "amount": "numeric value only",
+  "amount": "numeric value",
   "currency": "INR",
-  "vendor": "merchant/company name (e.g., redBus, Jai Sai Baba Travels, Rohit Kapoor)",
-  "expense_date": "YYYY-MM-DD format",
-  "payment_method": "UPI/Cash/Card/Net Banking/unknown",
-  "category_hint": "cab/food/stay/shopping/utilities/fuel/travel/other",
-  "notes": "brief description"
+  "vendor": "name",
+  "expense_date": "YYYY-MM-DD",
+  "payment_method": "UPI/Card/Cash",
+  "category_hint": "travel/food/shopping/other",
+  "notes": "short summary"
 }
 
-If a field is missing, use 0 for amount or empty string.
-OCR Text:
+OCR TEXT:
 [${ocrText}]`;
+
+            console.log('--- OCR RAW TEXT START ---');
+            console.log(ocrText);
+            console.log('--- OCR RAW TEXT END ---');
 
             const completion = await this.groq.chat.completions.create({
                 messages: [
@@ -65,11 +73,36 @@ OCR Text:
             });
 
             const responseContent = completion.choices[0]?.message?.content || '{}';
+            console.log('--- GROQ RESPONSE ---');
+            console.log(responseContent);
+
             const parsed = JSON.parse(responseContent);
 
-            // Clean amount: Remove currency symbols, commas, and handle potential spaces
-            let amountStr = String(parsed.amount || '0').replace(/[^\d.]/g, '');
-            let amount = parseFloat(amountStr) || 0;
+            // Robust amount cleaning
+            let rawAmount = parsed.amount;
+            let amount = 0;
+
+            if (rawAmount) {
+                // Remove all non-numeric except dot
+                let cleaned = String(rawAmount).replace(/[^\d.]/g, '');
+                amount = parseFloat(cleaned) || 0;
+            }
+
+            // Fallback: If amount is 0, try to find the largest number in OCR that isn't a date or part of a long ID
+            if (amount === 0) {
+                const numbers = ocrText.match(/\d+[\d,.]*/g) || [];
+                const candidates = numbers
+                    .map(n => n.replace(/,/g, ''))
+                    .map(n => parseFloat(n))
+                    .filter(n => !isNaN(n) && n > 0 && n < 1000000); // Exclude likely IDs or timestamps
+
+                if (candidates.length > 0) {
+                    // Logic: The transaction amount in GPay is often the largest standalone number
+                    // but we should favor the LLM's choice if it found anything.
+                    // This is just a safety logger for now.
+                    console.log('Fallback amount candidates:', candidates);
+                }
+            }
 
             return {
                 data: {
