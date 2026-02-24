@@ -45,3 +45,17 @@ model Expense {
 
   @@map("expenses")
 }
+
+model FactoryUpdate {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt       DateTime @default(now())
+  username        String
+  totalPeople     Int
+  usingHeadband   Int
+  notUsingHeadband Int
+  factoryName     String
+  updateWindow    DateTime // The specific time slot this update belongs to (e.g. 10:00:00)
+
+  @@index([username, updateWindow])
+  @@map("factory_updates")
+}

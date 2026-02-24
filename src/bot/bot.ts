@@ -24,6 +24,8 @@ interface MyContext extends Context {
     };
 }
 
+import { SchedulerService } from '../services/scheduler.service.js';
+
 let _bot: Telegraf<MyContext> | null = null;
 
 const getBot = () => {
@@ -33,6 +35,9 @@ const getBot = () => {
         }
         _bot = new Telegraf<MyContext>(config.TELEGRAM_BOT_TOKEN);
         setupBot(_bot);
+
+        // Initialize Scheduler
+        SchedulerService.init(_bot);
     }
     return _bot;
 };
@@ -177,6 +182,44 @@ Does this look correct?
         delete ctx.session.pendingExpense;
         await ctx.answerCbQuery('Cancelled');
         await ctx.editMessageText('❌ Bill processing cancelled.');
+    });
+
+    // --- Group Update Logic ---
+    bot.on(message('text'), async (ctx, next) => {
+        // Only process if it's in the designated factory group
+        const chatId = ctx.chat.id.toString();
+        if (chatId !== config.FACTORY_GROUP_ID) return next();
+
+        const text = ctx.message.text;
+        const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
+
+        // Check if it looks like an update (contains keywords or numbers)
+        if (text.toLowerCase().includes('update') || /\d+/.test(text)) {
+            const data = await GroqService.parseUpdate(text);
+            if (data && (data.total > 0 || data.using > 0)) {
+                // Calculate update window (round to next 15 mins)
+                const now = DateTime.now().setZone('Asia/Kolkata');
+                let minutes = now.minute;
+                let nextWindow = now.set({ second: 0, millisecond: 0 });
+
+                if (minutes <= 0) nextWindow = nextWindow.set({ minute: 0 });
+                else if (minutes <= 15) nextWindow = nextWindow.set({ minute: 15 });
+                else if (minutes <= 30) nextWindow = nextWindow.set({ minute: 30 });
+                else if (minutes <= 45) nextWindow = nextWindow.set({ minute: 45 });
+                else nextWindow = nextWindow.plus({ hours: 1 }).set({ minute: 0 });
+
+                await DbService.createFactoryUpdate({
+                    username,
+                    totalPeople: data.total,
+                    usingHeadband: data.using,
+                    notUsingHeadband: data.notUsing,
+                    factoryName: data.factory,
+                    updateWindow: nextWindow.toJSDate()
+                });
+
+                await ctx.reply(`✅ Update recorded for @${username} (Window: ${nextWindow.toFormat('HH:mm')})\n📊 ${data.using}/${data.total} using headbands.`);
+            }
+        }
     });
 }
 

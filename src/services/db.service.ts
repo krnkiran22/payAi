@@ -44,4 +44,29 @@ export class DbService {
             where: { username, category },
         });
     }
+
+    static async createFactoryUpdate(data: {
+        username: string;
+        totalPeople: number;
+        usingHeadband: number;
+        notUsingHeadband: number;
+        factoryName: string;
+        updateWindow: Date;
+    }) {
+        return await this.prisma.factoryUpdate.create({
+            data,
+        });
+    }
+
+    static async hasUserUpdated(username: string, windowTime: Date) {
+        const update = await this.prisma.factoryUpdate.findFirst({
+            where: {
+                username,
+                updateWindow: {
+                    equals: windowTime,
+                },
+            },
+        });
+        return !!update;
+    }
 }

@@ -168,4 +168,46 @@ OCR TEXT:
             throw new Error(`Text parsing failed: ${error?.message}`);
         }
     }
+
+    /**
+     * Parse text-based factory updates from group chat.
+     */
+    static async parseUpdate(text: string): Promise<{ total: number, using: number, notUsing: number, factory: string } | null> {
+        if (!this.groq) return null;
+
+        const systemPrompt = "You are an expert data extractor. Extract factory update numbers from text.";
+        const userPrompt = `Extract update data from this message: "${text}".
+We are looking for:
+1. Total people.
+2. People using headbands.
+3. People not using headbands.
+4. Factory name (if mentioned, otherwise "unknown").
+
+Return ONLY JSON:
+{
+  "total": number,
+  "using": number,
+  "notUsing": number,
+  "factory": "string"
+}
+
+If numbers are missing, try to calculate (total = using + notUsing). If not possible, use 0.`;
+
+        try {
+            const completion = await this.groq.chat.completions.create({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                model: 'llama-3.1-8b-instant', // Faster model for text parsing
+                response_format: { type: 'json_object' }
+            });
+
+            const content = completion.choices[0]?.message?.content || '{}';
+            return JSON.parse(content);
+        } catch (error) {
+            console.error('Update Parse Error:', error);
+            return null;
+        }
+    }
 }

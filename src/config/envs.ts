@@ -13,6 +13,7 @@ export const config = {
     APPROVED_USERS: (process.env.APPROVED_USERS || 'fredrikparker,john,rahul')
         .split(',')
         .map(u => u.trim().replace(/^@/, '')),
+    FACTORY_GROUP_ID: process.env.FACTORY_GROUP_ID || '',
     TEMP_DIR: path.join(process.cwd(), 'tmp'),
 };
 
