@@ -20,6 +20,9 @@ export class OcrService {
             const { data: { text } } = await worker.recognize(processedPath);
             await worker.terminate();
 
+            console.error('--- RAW OCR FROM TESSERACT ---');
+            console.error(text);
+
             // Clean up processed file
             try {
                 await fs.unlink(processedPath);

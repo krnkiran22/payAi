@@ -39,10 +39,11 @@ GOAL: Extract the Transaction Amount, Vendor Name, Date, and Payment Method.
 
 GUIDELINES:
 1. THE AMOUNT: 
-   - On GPay: It's the largest number (e.g., 150, 500, 1200). 
-   - IGNORE numbers near keywords like "Balance", "Remaining", "Limit", or "UPI Lite".
-   - If you see digits with spaces (e.g., "1 5 0"), combine them.
-2. THE VENDOR: Look after "Paid to", "To:", or the merchant name at the top.
+   - On GPay/UPI: Look for the number being PAID. It is usually big and bold.
+   - 🚫 ABSOLUTE RULE: IGNORE any number that is labeled "Balance", "Remaining", "LITE Balance", or "Limit". 
+   - 🚫 IF A NUMBER IS NEXT TO THE WORD "BALANCE", IT IS NOT THE AMOUNT. 
+   - Look for words like "Paid to", "Paying", "Successful", or "₹" followed by a number that is NOT a balance.
+2. THE VENDOR: Look after "Paid to", "To:", or the merchant name at the top (e.g., "Rohit Kapoor", "redBus").
 3. THE DATE: Usually at the top or bottom in DD/MM/YYYY or MMM DD format.
 
 Return ONLY a JSON object:
@@ -59,9 +60,10 @@ Return ONLY a JSON object:
 OCR TEXT:
 [${ocrText}]`;
 
-            console.log('--- OCR RAW TEXT START ---');
-            console.log(ocrText);
-            console.log('--- OCR RAW TEXT END ---');
+            // Using console.error for high visibility in Render logs
+            console.error('--- DEBUG: OCR RAW TEXT START ---');
+            console.error(ocrText);
+            console.error('--- DEBUG: OCR RAW TEXT END ---');
 
             const completion = await this.groq.chat.completions.create({
                 messages: [
@@ -73,8 +75,8 @@ OCR TEXT:
             });
 
             const responseContent = completion.choices[0]?.message?.content || '{}';
-            console.log('--- GROQ RESPONSE ---');
-            console.log(responseContent);
+            console.error('--- DEBUG: GROQ RESPONSE ---');
+            console.error(responseContent);
 
             const parsed = JSON.parse(responseContent);
 
