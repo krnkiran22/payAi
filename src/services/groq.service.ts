@@ -33,20 +33,23 @@ export class GroqService {
                 throw new Error('Groq API Key is not configured.');
             }
 
-            const systemPrompt = "You are a bill parsing engine. Extract structured data from OCR text of Indian bills and receipts.";
-            const userPrompt = `Extract the following fields from this bill text and return ONLY a valid JSON object with no explanation:
+            const systemPrompt = "You are an expert Indian bill and UPI payment parsing engine. Extract structured data from OCR text of bills, receipts, or GPay/UPI screenshots.";
+            const userPrompt = `Extract the following fields from this OCR text. Focus on finding the TRANSACTION AMOUNT, MERCHANT/VENDOR NAME, and DATE. 
+For GPay/UPI screenshots, look for keywords like "Paid to", "To:", "Transaction ID", or large bold numbers which usually represent the amount.
+
+Return ONLY a valid JSON object:
 {
-  "amount": "numeric value only",
-  "currency": "INR or USD etc",
-  "vendor": "merchant/company name",
+  "amount": "numeric value only (remove currency symbols, commas)",
+  "currency": "INR",
+  "vendor": "merchant/company/person name",
   "expense_date": "YYYY-MM-DD format",
   "payment_method": "UPI/Cash/Card/Net Banking/unknown",
   "category_hint": "cab/food/stay/shopping/utilities/fuel/travel/other",
-  "notes": "brief description of what was purchased"
+  "notes": "brief description"
 }
 
-If a field cannot be found, use empty values (0 for amount, empty string for others).
-Bill text:
+If a field cannot be found, use 0 for amount or empty string for others.
+OCR Text:
 [${ocrText}]`;
 
             const completion = await this.groq.chat.completions.create({
