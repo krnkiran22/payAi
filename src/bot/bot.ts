@@ -44,14 +44,11 @@ const getBot = () => {
 function setupBot(bot: Telegraf<MyContext>) {
     bot.use(session({ defaultSession: () => ({}) }));
 
-    // Auth Middleware
+    // Global Logger
     bot.use(async (ctx, next) => {
-        const username = (ctx.from?.username || ctx.from?.first_name || 'unknown').toLowerCase();
-        const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username);
-
-        if (!isApproved) {
-            return ctx.reply(`Sorry @${ctx.from?.username || ctx.from?.first_name}, you are not authorized.`);
-        }
+        const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
+        const text = (ctx.message && 'text' in ctx.message) ? ctx.message.text : 'non-text';
+        console.log(`📩 [${ctx.chat?.type}] From: @${username} | Text: ${text}`);
         return next();
     });
 
@@ -59,8 +56,19 @@ function setupBot(bot: Telegraf<MyContext>) {
         ctx.reply('Welcome to PotatoBot! 🥔\nSend me a bill or update the factory status.');
     });
 
+    bot.command('id', (ctx) => {
+        ctx.reply(`Group ID: ${ctx.chat.id}`);
+    });
+
+    bot.command('ping', (ctx) => {
+        ctx.reply('Pong! I am alive and ready to roast.');
+    });
+
     bot.on(message('photo'), async (ctx) => {
-        const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
+        const username = (ctx.from?.username || ctx.from?.first_name || 'unknown').toLowerCase();
+        const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username);
+        if (!isApproved) return ctx.reply("❌ Unauthorized to save bills.");
+
         const photo = ctx.message.photo.pop();
         if (!photo) return;
 
@@ -133,7 +141,10 @@ Does this look correct?`;
         // Only process updates if it's the right group
         if (chatId !== config.FACTORY_GROUP_ID) return next();
 
-        // --- Factory Update Logic ---
+        // --- Factory Update Logic (Auth Protected) ---
+        const isApproved = config.APPROVED_USERS.some(u => u.toLowerCase() === username.toLowerCase());
+        if (!isApproved) return;
+
         if (text.toLowerCase().includes('update') || /\d+/.test(text)) {
             const data = await GroqService.parseUpdate(text);
             if (data && (data.total > 0 || data.using > 0)) {
