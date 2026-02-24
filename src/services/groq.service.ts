@@ -32,7 +32,7 @@ export class GroqService {
             if (!this.groq) {
                 throw new Error('Groq API Key is not configured.');
             }
-            // ... the rest of the method uses this.groq
+
             const systemPrompt = "You are a bill parsing engine. Extract structured data from OCR text of Indian bills and receipts.";
             const userPrompt = `Extract the following fields from this bill text and return ONLY a valid JSON object with no explanation:
 {
@@ -54,7 +54,7 @@ Bill text:
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt },
                 ],
-                model: 'llama-3-70b-8192',
+                model: 'llama-3.3-70b-versatile',
                 response_format: { type: 'json_object' },
             });
 
