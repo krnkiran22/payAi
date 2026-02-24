@@ -2,12 +2,15 @@ import { google } from 'googleapis';
 import fs from 'fs';
 import { config } from '../config/envs.js';
 
+import { getGoogleAuth } from '../utils/auth.utils.js';
+
 export class DriveService {
     private static drive = google.drive({ version: 'v3', auth: this.getAuth() });
 
     private static getAuth() {
+        const credentials = getGoogleAuth();
         const auth = new google.auth.GoogleAuth({
-            keyFile: config.GOOGLE_SERVICE_ACCOUNT_JSON,
+            credentials,
             scopes: ['https://www.googleapis.com/auth/drive'],
         });
         return auth;
