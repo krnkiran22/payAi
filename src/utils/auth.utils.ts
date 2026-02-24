@@ -25,15 +25,24 @@ export const getGoogleAuth = () => {
             return JSON.parse(rawJson);
         } catch (err) {
             try {
-                // Attempt 2: Fix literal newlines which are common in private keys but invalid in JSON strings
-                // This replaces actual newline characters with the string "\n"
-                const fixedJson = rawJson.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+                // Attempt 2: Fix common escaping issues
+                // 1. Replace literal newlines with escaped versions
+                // 2. Escape backslashes that are not already escaping something valid in JSON strings
+                const fixedJson = rawJson
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r')
+                    .replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+
                 return JSON.parse(fixedJson);
             } catch (err2) {
-                console.error('JSON Parse Error Position details:', err);
-                throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON as JSON. 
-Ensure you pasted the ENTIRE content of the JSON file exactly as is. 
-Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+                console.error('--- DEBUG: JSON PARSE FAILURE ---');
+                console.error('Original Raw String (First 100 chars):', rawJson.substring(0, 100));
+                console.error('Error at Position:', (err2 as any).message);
+
+                throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON. 
+The JSON is malformed. This usually happens when the Private Key is not properly escaped in Render.
+Try pasting it again or use a "Secret File" on Render.
+Internal Error: ${(err2 as any).message}`);
             }
         }
     }
