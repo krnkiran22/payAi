@@ -13,20 +13,51 @@ export interface ExtractedData {
 }
 
 export class GroqService {
-    private static _client: any = null;
+    private static _clients: any[] = [];
+    private static _currentIndex = 0;
 
     private static get client() {
-        if (!this._client) {
-            if (!config.GROQ_API_KEY) {
-                console.warn('⚠️ GROQ_API_KEY is not set.');
+        if (this._clients.length === 0) {
+            if (config.GROQ_API_KEYS.length === 0) {
+                console.warn('⚠️ No GROQ API keys set.');
                 return null;
             }
-            this._client = new OpenAI({
-                apiKey: config.GROQ_API_KEY,
+            this._clients = config.GROQ_API_KEYS.map(key => new OpenAI({
+                apiKey: key,
                 baseURL: 'https://api.groq.com/openai/v1',
-            });
+            }));
         }
-        return this._client;
+        return this._clients[this._currentIndex];
+    }
+
+    private static rotateKey() {
+        if (this._clients.length > 1) {
+            this._currentIndex = (this._currentIndex + 1) % this._clients.length;
+            console.log(`🔄 Rotated to Groq API Key index ${this._currentIndex}`);
+        }
+    }
+
+    private static async runWithRetry(fn: (client: any) => Promise<any>): Promise<any> {
+        let attempts = 0;
+        const maxAttempts = this._clients.length > 0 ? this._clients.length : 1;
+
+        while (attempts < maxAttempts) {
+            const currentClient = this.client;
+            if (!currentClient) throw new Error('No client available');
+
+            try {
+                return await fn(currentClient);
+            } catch (err: any) {
+                if (err?.status === 429 || err?.message?.includes('rate limit') || err?.status === 401) {
+                    console.warn(`🛑 Key index ${this._currentIndex} exhausted or invalid. Rotating...`);
+                    this.rotateKey();
+                    attempts++;
+                } else {
+                    throw err;
+                }
+            }
+        }
+        throw new Error('All Groq API keys exhausted or failed.');
     }
 
     /**
@@ -40,9 +71,8 @@ export class GroqService {
     }
 
     static async parseBill(ocrText: string): Promise<{ data: ExtractedData; raw: string }> {
-        if (!this.client) throw new Error('Client not initialized');
-
-        const prompt = `Extract bill data as JSON:
+        const prompt = `CONTEXT: ${config.GOAL_CONTEXT}
+Extract bill data as JSON:
 {
   "amount": 0,
   "currency": "INR",
@@ -57,10 +87,10 @@ OCR TEXT:
 [${ocrText}]`;
 
         try {
-            const response = await this.client.responses.create({
+            const response = await this.runWithRetry((client) => client.responses.create({
                 model: 'openai/gpt-oss-20b',
                 input: prompt,
-            });
+            }));
 
             const content = response.output_text || '{}';
             // Clean content (sometimes models wrap in markdown)
@@ -86,15 +116,14 @@ OCR TEXT:
     }
 
     static async chat(message: string): Promise<string> {
-        if (!this.client) return "Bot offline.";
-
         try {
-            const response = await this.client.responses.create({
+            const response = await this.runWithRetry((client) => client.responses.create({
                 model: 'openai/gpt-oss-20b',
                 input: `You are PotatoBot, a savage, funny, and edgy Telegram bot. 
+CONTEXT: ${config.GOAL_CONTEXT}
 The user said: "${message}". 
-Reply to them in a devastatingly funny and savage way. Keep it short.`,
-            });
+Reply to them in a devastatingly funny and savage way. Keep it short. Ensure you occasionally remind them of the March 7 goal if relevant.`,
+            }));
             return response.output_text || "I'm speechless at your stupidity.";
         } catch (error) {
             console.error('Chat Error:', error);
@@ -103,9 +132,8 @@ Reply to them in a devastatingly funny and savage way. Keep it short.`,
     }
 
     static async parseUpdate(text: string): Promise<{ total: number, using: number, notUsing: number, factory: string } | null> {
-        if (!this.client) return null;
-
-        const prompt = `Extract factory update data from this message: "${text}".
+        const prompt = `CONTEXT: ${config.GOAL_CONTEXT}
+Extract factory update data from this message: "${text}".
 Return ONLY JSON:
 {
   "total": number,
@@ -116,10 +144,10 @@ Return ONLY JSON:
 If numbers are missing, calculate (total = using + notUsing).`;
 
         try {
-            const response = await this.client.responses.create({
+            const response = await this.runWithRetry((client) => client.responses.create({
                 model: 'openai/gpt-oss-20b',
                 input: prompt,
-            });
+            }));
 
             const content = response.output_text || '{}';
             const jsonStr = content.substring(content.indexOf('{'), content.lastIndexOf('}') + 1);

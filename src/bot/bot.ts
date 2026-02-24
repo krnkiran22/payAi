@@ -64,6 +64,10 @@ function setupBot(bot: Telegraf<MyContext>) {
         ctx.reply('Pong! I am alive and ready to roast.');
     });
 
+    bot.command('goal', (ctx) => {
+        ctx.replyWithMarkdown(`🎯 *MISSION CRITICAL GOAL:*\n\n1 Million Hours of data by *MARCH 7*.\n\nKeep updating or get roasted!`);
+    });
+
     // --- Bill Photo Handler ---
     bot.on(message('photo'), async (ctx) => {
         const username = (ctx.from?.username || ctx.from?.first_name || 'unknown').toLowerCase();

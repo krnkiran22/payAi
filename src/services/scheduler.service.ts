@@ -22,14 +22,22 @@ export class SchedulerService {
         });
 
         // 60-minute check (10:00 AM to 9:00 PM)
-        // Check at :01 each hour
         cron.schedule('1 10-21 * * *', () => {
             this.checkUpdates(60);
         }, {
             timezone: "Asia/Kolkata"
         });
 
-        console.log('⏰ Scheduler initialized (9 AM - 9 PM, 15/60 min cycles)');
+        // Goal Reminder (Every 3 hours at :30)
+        cron.schedule('30 9-21/3 * * *', async () => {
+            if (!config.FACTORY_GROUP_ID) return;
+            const reminder = await RoastService.generateRoast(['system_goal_reminder']);
+            await this.bot.telegram.sendMessage(config.FACTORY_GROUP_ID, `🎯 *GOAL PROGRESS REMINDER* 🎯\n\n${reminder}`, { parse_mode: 'Markdown' });
+        }, {
+            timezone: "Asia/Kolkata"
+        });
+
+        console.log('⏰ Scheduler initialized (9 AM - 9 PM, 15/60/Goal cycles)');
     }
 
     private static async checkUpdates(type: 15 | 60) {
