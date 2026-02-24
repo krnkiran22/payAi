@@ -38,6 +38,8 @@ export class GroqService {
 CRITICAL: For invoices, look for "Total Invoice Value", "Grand Total", or "Net Amount". 
 For GPay/UPI, look for the largest bold number or digits near "₹" or "Paid to".
 
+🚫 IMPORTANT: Ignore any amounts labeled as "Balance", "Remaining Balance", "UPI Lite Balance", or "Available Credit". ONLY extract the actual amount being paid or transferred.
+
 Return ONLY a valid JSON object:
 {
   "amount": "numeric value only",

@@ -30,8 +30,11 @@ export class DriveService {
     }
 
     static async getOrCreateFolder(folderName: string, parentId?: string): Promise<string> {
+        const drive = this.drive;
+        if (!drive) throw new Error('Drive client not initialized');
+
         const q = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' ${parentId ? `and '${parentId}' in parents` : ''} and trashed=false`;
-        const res = await this.drive.files.list({ q, fields: 'files(id, name)' });
+        const res = await drive.files.list({ q, fields: 'files(id, name)' });
 
         if (res.data.files && res.data.files.length > 0) {
             return res.data.files[0].id!;
@@ -43,7 +46,7 @@ export class DriveService {
             parents: parentId ? [parentId] : [],
         };
 
-        const folder = await this.drive.files.create({
+        const folder = await drive.files.create({
             requestBody: fileMetadata,
             fields: 'id',
         });
@@ -52,7 +55,10 @@ export class DriveService {
     }
 
     static async uploadFile(filePath: string, fileName: string, mimeType: string, parentFolderId: string) {
-        const res = await this.drive.files.create({
+        const drive = this.drive;
+        if (!drive) throw new Error('Drive client not initialized');
+
+        const res = await drive.files.create({
             requestBody: {
                 name: fileName,
                 parents: [parentFolderId],
