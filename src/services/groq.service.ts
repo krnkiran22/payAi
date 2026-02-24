@@ -34,21 +34,22 @@ export class GroqService {
             }
 
             const systemPrompt = "You are an expert Indian bill and UPI payment parsing engine. Extract structured data from OCR text of bills, receipts, or GPay/UPI screenshots.";
-            const userPrompt = `Extract the following fields from this OCR text. Focus on finding the TRANSACTION AMOUNT, MERCHANT/VENDOR NAME, and DATE. 
-For GPay/UPI screenshots, look for keywords like "Paid to", "To:", "Transaction ID", or large bold numbers which usually represent the amount.
+            const userPrompt = `Extract the following fields from this OCR text. 
+CRITICAL: For invoices, look for "Total Invoice Value", "Grand Total", or "Net Amount". 
+For GPay/UPI, look for the largest bold number or digits near "₹" or "Paid to".
 
 Return ONLY a valid JSON object:
 {
-  "amount": "numeric value only (remove currency symbols, commas)",
+  "amount": "numeric value only",
   "currency": "INR",
-  "vendor": "merchant/company/person name",
+  "vendor": "merchant/company name (e.g., redBus, Jai Sai Baba Travels, Rohit Kapoor)",
   "expense_date": "YYYY-MM-DD format",
   "payment_method": "UPI/Cash/Card/Net Banking/unknown",
   "category_hint": "cab/food/stay/shopping/utilities/fuel/travel/other",
   "notes": "brief description"
 }
 
-If a field cannot be found, use 0 for amount or empty string for others.
+If a field is missing, use 0 for amount or empty string.
 OCR Text:
 [${ocrText}]`;
 
@@ -64,9 +65,13 @@ OCR Text:
             const responseContent = completion.choices[0]?.message?.content || '{}';
             const parsed = JSON.parse(responseContent);
 
+            // Clean amount: Remove currency symbols, commas, and handle potential spaces
+            let amountStr = String(parsed.amount || '0').replace(/[^\d.]/g, '');
+            let amount = parseFloat(amountStr) || 0;
+
             return {
                 data: {
-                    amount: parseFloat(parsed.amount) || 0,
+                    amount,
                     currency: parsed.currency || 'INR',
                     vendor: parsed.vendor || 'Unknown',
                     expense_date: parsed.expense_date || new Date().toISOString().split('T')[0],
