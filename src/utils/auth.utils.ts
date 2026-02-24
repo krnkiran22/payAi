@@ -7,17 +7,29 @@ import { config } from '../config/envs.js';
  * On Render: Can read from a raw string in ENV to avoid file system issues.
  */
 export const getGoogleAuth = () => {
-    const jsonPath = config.GOOGLE_SERVICE_ACCOUNT_JSON;
+    let rawJson = config.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
 
-    // If the path looks like a JSON string (for Render/Prod env vars)
-    if (jsonPath.startsWith('{')) {
-        return JSON.parse(jsonPath);
+    if (!rawJson) {
+        throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON environment variable is empty.");
     }
 
-    // Otherwise read from file
-    if (fs.existsSync(jsonPath)) {
-        return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    // If the string starts with '{', it's likely a raw JSON string
+    if (rawJson.startsWith('{')) {
+        try {
+            return JSON.parse(rawJson);
+        } catch (err) {
+            throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON as JSON: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
     }
 
-    throw new Error(`Google Service Account JSON not found at ${jsonPath} and is not a valid JSON string.`);
+    // Otherwise treat as file path
+    if (fs.existsSync(rawJson)) {
+        try {
+            return JSON.parse(fs.readFileSync(rawJson, 'utf8'));
+        } catch (err) {
+            throw new Error(`Failed to read or parse Google JSON file at ${rawJson}`);
+        }
+    }
+
+    throw new Error(`Google Service Account JSON not found (Check if it's a valid path or raw JSON string).`);
 };

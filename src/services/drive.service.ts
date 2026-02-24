@@ -12,8 +12,9 @@ export class DriveService {
             try {
                 this._drive = google.drive({ version: 'v3', auth: this.getAuth() });
             } catch (err) {
-                console.error('❌ Failed to initialize Google Drive client:', err);
-                return null;
+                const msg = err instanceof Error ? err.message : 'Unknown error';
+                console.error(`❌ Failed to initialize Google Drive client: ${msg}`);
+                throw new Error(`Google Drive setup failed: ${msg}`);
             }
         }
         return this._drive;
