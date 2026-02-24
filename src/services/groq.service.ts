@@ -73,9 +73,9 @@ Bill text:
                 },
                 raw: responseContent,
             };
-        } catch (error) {
-            console.error('Groq Parsing Error:', error);
-            throw new Error('Failed to parse bill data');
+        } catch (error: any) {
+            console.error('Groq Parsing Error Details:', error?.response?.data || error?.message || error);
+            throw new Error(`Failed to parse bill data: ${error?.message || 'Unknown error'}`);
         }
     }
 }
