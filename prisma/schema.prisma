@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  cab
+  food
+  stay
+  shopping
+  utilities
+  fuel
+  travel
+  other
+}
+
+enum Status {
+  pending
+  processed
+  failed
+}
+
+model Expense {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt          DateTime @default(now())
+  username           String
+  category           Category
+  amount             Float
+  vendor             String
+  expenseDate        DateTime
+  paymentMethod      String
+  currency           String   @default("INR")
+  notes              String?
+  invoiceDriveLink   String?
+  paymentDriveLink   String?
+  invoiceLocalPath   String
+  paymentLocalPath   String?
+  rawOcrText         String
+  groqRawResponse    String
+  status             Status   @default(pending)
+
+  @@map("expenses")
+}
