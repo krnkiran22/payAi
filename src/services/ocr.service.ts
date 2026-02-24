@@ -10,9 +10,11 @@ export class OcrService {
             const processedPath = path.join(path.dirname(filePath), `processed_${path.basename(filePath)}`);
 
             await sharp(filePath)
+                .resize({ width: 2000, withoutEnlargement: true }) // Upscale if small for better OCR
                 .grayscale()
                 .normalize()
-                // .threshold() // Optional: can improve or worsen depending on image quality
+                .sharpen()
+                .threshold(180) // Convert to high-contrast black/white
                 .toFile(processedPath);
 
             const worker = await createWorker('eng');
